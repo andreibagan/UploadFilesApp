@@ -1,11 +1,26 @@
 ﻿@page "/"
+@using UploadFiles.DAL.Data;
 @inject IConfiguration config
 
 <PageTitle>Index</PageTitle>
 
 <h1>Upload file</h1>
 
-<InputFile OnChange="@LoadFiles" class="form-control" multiple accept=".png,.jpg,.txt"/>
+<EditForm Model="customer" OnValidSubmit="SubmitFormAsync">
+    <div>
+        <label for="firstName">First Name:</label> 
+        <InputText id="firstName" class="form-control" @bind-Value="customer.FirstName" />
+    </div>
+    <div>
+        <label for="lastName">Last Name:</label>
+        <InputText id="lastName" class="form-control" @bind-Value="customer.LastName" />
+    </div>
+    <div>
+        <label for="profilePicture">Profile Picture:</label>
+        <InputFile OnChange="@LoadFiles" id="profilePicture" class="form-control" accept=".png,.jpg,.txt" />
+    </div>
+    <button class="btn btn-primary mt-3" type="submit">Create Customer</button>
+</EditForm>
 
 @if (errors.Count > 0)
 {
@@ -23,15 +38,31 @@
     private readonly int maxAllowedFiles = 3;
     private readonly List<string> errors = new List<string>();
     private const string _subPath = "bagan";
+    private readonly CustomerModel customer = new CustomerModel();
+    private IBrowserFile? file;
 
-    private async Task LoadFiles(InputFileChangeEventArgs e)
+    private void LoadFiles(InputFileChangeEventArgs e)
     {
-        errors.Clear();
+        file = e.File;
+    }
 
-        if (e.FileCount > maxAllowedFiles)
+    private async Task SubmitFormAsync()
+    {
+        try
         {
-            errors.Add($"Error: Attempting to upload {e.FileCount} files, but only {maxAllowedFiles} files are allowed");
-            return;
+            var relativePath = await CaptureFileAsync();
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Error: {ex.Message}");
+        }
+    }
+
+    private async Task<string> CaptureFileAsync()
+    {
+        if (file == null)
+        {
+            return await Task.FromResult(string.Empty);
         }
 
         var fileStoragePath = config.GetValue<string>("FileStorage");
@@ -46,28 +77,28 @@
             _subPath);
 
         Directory.CreateDirectory(fileStoragePathWithSubPath);
-
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        try
         {
-            try
-            {
-                var newFileName = Path.ChangeExtension(
-                Path.GetRandomFileName(), 
+            var newFileName = Path.ChangeExtension(
+                Path.GetRandomFileName(),
                 Path.GetExtension(file.Name));
 
-                var path = Path.Combine(
-                    fileStoragePathWithSubPath,
-                    newFileName);
+            var path = Path.Combine(
+                fileStoragePathWithSubPath,
+                newFileName);
 
-                await using (var fileStream = new FileStream(path, FileMode.Create))
-                {
-                    await file.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
-                }
-            }
-            catch (Exception ex)
+            await using (var fileStream = new FileStream(path, FileMode.Create))
             {
-                errors.Add($"File: {file.Name} Error: {ex.Message}");
+                await file.OpenReadStream(maxFileSize).CopyToAsync(fileStream);
             }
+
+            var relativePath = Path.Combine(_subPath, newFileName);
+            return await Task.FromResult(relativePath);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"File: {file.Name} Error: {ex.Message}");
+            throw;
         }
     }
 }
