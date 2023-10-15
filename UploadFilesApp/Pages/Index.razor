@@ -1,6 +1,8 @@
 ﻿@page "/"
-@using UploadFiles.DAL.Data;
+@using UploadFiles.DAL.DataAccess;
+@using UploadFiles.Model.Data;
 @inject IConfiguration config
+@inject ISqlDataAccess dataAccess
 
 <PageTitle>Index</PageTitle>
 
@@ -17,7 +19,7 @@
     </div>
     <div>
         <label for="profilePicture">Profile Picture:</label>
-        <InputFile OnChange="@LoadFiles" id="profilePicture" class="form-control" accept=".png,.jpg,.txt" />
+        <InputFile OnChange="LoadFiles" id="profilePicture" class="form-control" accept=".png,.jpg,.txt" />
     </div>
     <button class="btn btn-primary mt-3" type="submit">Create Customer</button>
 </EditForm>
@@ -35,10 +37,9 @@
 
 @code {
     private readonly long maxFileSize = 3 * 1024 * 1024; //represents 3MB
-    private readonly int maxAllowedFiles = 3;
     private readonly List<string> errors = new List<string>();
     private const string _subPath = "bagan";
-    private readonly CustomerModel customer = new CustomerModel();
+    private CustomerModel customer = new CustomerModel();
     private IBrowserFile? file;
 
     private void LoadFiles(InputFileChangeEventArgs e)
@@ -48,14 +49,28 @@
 
     private async Task SubmitFormAsync()
     {
+        errors.Clear();
+
         try
         {
             var relativePath = await CaptureFileAsync();
+            customer.FileName = relativePath;
+
+            await dataAccess.SaveDataAsync(DataAccessConsts.CustomerInsertProcedureName, customer);
+
+            ResetCustomerForm();
         }
         catch (Exception ex)
         {
             errors.Add($"Error: {ex.Message}");
         }
+    }
+
+    private void ResetCustomerForm()
+    {
+        customer = new CustomerModel();
+        file = null;
+        errors.Clear();
     }
 
     private async Task<string> CaptureFileAsync()
